@@ -274,6 +274,8 @@
   let currentTab = 'journal';
   let lastProcessedMsgTime = 0; 
   let lastDisplayedMsgCount = 0; 
+  let lastJournalDataString = "";
+  let lastMessageDataString = "";
   let absenceChartInstance = null;
   let hitRateChartInstance = null;
   let allGraphData = [];
@@ -295,7 +297,7 @@
            loadJournalData(true);
         }
     } else if (currentTab === 'message') {
-        loadMessages(false);
+        loadMessages(false, true);
     }
     checkNewMessages();
   }
@@ -498,7 +500,14 @@
   async function loadJournalData(isAuto) {
     if(!isAuto) document.getElementById('journalList').innerHTML = '<div style="padding:20px; text-align:center;">読込中...</div>';
     const data = await fetchData("?action=getJournal");
-    if(data) { allJournalData = data; if(!isAuto) populateDateSelect(); renderJournalList(); }
+    if(data) { 
+        const newDataString = JSON.stringify(data);
+        if (isAuto && newDataString === lastJournalDataString) return; // 変更がなければ再描画しない
+        lastJournalDataString = newDataString;
+        allJournalData = data; 
+        populateDateSelect(); 
+        renderJournalList(); 
+    }
   }
   function populateDateSelect() {
       const select = document.getElementById('journalDate');
@@ -603,10 +612,15 @@
   function clearDate() { document.getElementById('journalDate').value = ""; renderJournalList(); }
   
   // --- Message Logic ---
-  async function loadMessages(forceScroll = false) {
+  async function loadMessages(forceScroll = false, isAuto = false) {
       const data = await fetchData("?action=getChat");
       const list = document.getElementById('messageList');
       if(!data || !data.length) { list.innerHTML = "<div style='text-align:center;color:white;padding:20px;'>なし</div>"; return; }
+      
+      const newDataString = JSON.stringify(data);
+      if (isAuto && newDataString === lastMessageDataString) return; // 変更がなければ再描画しない
+      lastMessageDataString = newDataString;
+
       
       let html = "", lastDate = "";
       let unreadSeparatorInserted = false;
