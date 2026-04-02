@@ -26,6 +26,7 @@
       margin: 0; 
       color: #333; 
       height: 100vh;
+      height: 100dvh;
       display: flex; 
       flex-direction: column;
       overflow: hidden; 
@@ -81,7 +82,7 @@
 
   /* Container */
   .container { flex: 1; position: relative; overflow: hidden; background: #f0f2f5; }
-  .tab-content { display: none; height: 100%; overflow-y: auto; padding: 15px; -webkit-overflow-scrolling: touch; }
+  .tab-content { display: none; height: 100%; overflow-y: auto; padding: 15px; padding-bottom: calc(15px + env(safe-area-inset-bottom, 20px)); -webkit-overflow-scrolling: touch; }
   .tab-content.active { display: block; }
   
   #message.tab-content { padding: 0; display: none; flex-direction: column; background-color: var(--chat-bg); }
@@ -135,9 +136,9 @@
   .icon-img { width: 36px; height: 36px; background: #bdc3c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; margin-right: 8px; }
   .sender-name { font-size: 0.7rem; color: #fff; margin-bottom: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
   
-  .chat-input-area { background: var(--input-area-bg); padding: 10px; display: flex; gap: 10px; align-items: flex-end; border-top: 1px solid #ddd; flex-shrink: 0; }
+  .chat-input-area { background: var(--input-area-bg); padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 10px)); display: flex; gap: 10px; align-items: flex-end; border-top: 1px solid #ddd; flex-shrink: 0; }
   .chat-input-area textarea { flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 20px; resize: none; height: 42px; }
-  .send-btn { background: var(--send-btn-color); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; }
+  .send-btn { background: var(--send-btn-color); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; margin-bottom: env(safe-area-inset-bottom, 0px); }
   
   .date-divider { text-align: center; margin: 10px 0; font-size: 0.75rem; color: #eee; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
   
