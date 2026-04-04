@@ -148,6 +148,45 @@
   }
   .unread-divider span { background: var(--chat-bg); padding: 0 10px; }
 
+  /* Reaction Styles */
+  .msg-container { position: relative; margin-bottom: 6px; }
+  .reaction-box {
+      position: absolute; bottom: -14px; right: 4px; background: white;
+      border: 1px solid #ddd; border-radius: 12px; padding: 2px 7px;
+      font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 5;
+      line-height: 1; white-space: nowrap; cursor: pointer;
+  }
+  .msg-container.other-msg { cursor: pointer; }
+
+  /* Emoji Picker Popup */
+  #emojiPicker {
+      display: none; position: fixed; z-index: 9999;
+      background: white; border-radius: 30px;
+      padding: 8px 12px; gap: 6px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      border: 1px solid #eee;
+      flex-direction: row; align-items: center;
+      transform: translateY(-8px);
+  }
+  #emojiPicker.show { display: flex; animation: popIn 0.15s ease; }
+  @keyframes popIn {
+      from { opacity: 0; transform: translateY(0px) scale(0.85); }
+      to   { opacity: 1; transform: translateY(-8px) scale(1); }
+  }
+  .emoji-btn {
+      font-size: 1.55rem; cursor: pointer; transition: transform 0.1s;
+      line-height: 1; background: none; border: none; padding: 4px;
+      border-radius: 50%;
+  }
+  .emoji-btn:hover, .emoji-btn:active { transform: scale(1.25); background: #f5f5f5; }
+  .emoji-custom-btn {
+      font-size: 0.75rem; cursor: pointer; background: #f0f0f0;
+      border: none; border-radius: 50%; width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      color: #555; font-weight: bold;
+  }
+  .emoji-custom-btn:hover { background: #e0e0e0; }
+
   /* Graph Styles */
   .month-selector-area {
       background: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: center; align-items: center; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -248,6 +287,16 @@
         </table>
     </div>
   </div>
+</div>
+
+<!-- Emoji Picker Popup -->
+<div id="emojiPicker">
+  <button class="emoji-btn" onclick="pickEmoji('❤️')">❤️</button>
+  <button class="emoji-btn" onclick="pickEmoji('👍')">👍</button>
+  <button class="emoji-btn" onclick="pickEmoji('😊')">😊</button>
+  <button class="emoji-btn" onclick="pickEmoji('😂')">😂</button>
+  <button class="emoji-btn" onclick="pickEmoji('✨')">✨</button>
+  <button class="emoji-custom-btn" onclick="openCustomEmoji()" title="その他">＋</button>
 </div>
 
 <div id="settingsModal" class="modal-overlay">
@@ -619,16 +668,35 @@
       if(!data || !data.length) { list.innerHTML = "<div style='text-align:center;color:white;padding:20px;'>なし</div>"; return; }
       
       const newDataString = JSON.stringify(data);
-      if (isAuto && newDataString === lastMessageDataString) return; // 変更がなければ再描画しない
+      if (isAuto && newDataString === lastMessageDataString) return; 
       lastMessageDataString = newDataString;
 
-      
+      const reactions = {}; // { targetTime: { sender: emoji } }
+      const normalData = [];
+      data.forEach(m => {
+          if(!m.message) return;
+          const rMatch = m.message.match(/^__REACTION__:(.+?):(.+)$/);
+          const cancelMatch = m.message.match(/^__REACTION_CANCEL__:(.+)$/);
+          if (rMatch) {
+             const emoji = rMatch[1];
+             const tTime = rMatch[2];
+             if (!reactions[tTime]) reactions[tTime] = {};
+             reactions[tTime][m.sender] = emoji; // 1 sender = 1 reaction (last wins)
+          } else if (cancelMatch) {
+             const tTime = cancelMatch[1];
+             if (reactions[tTime]) delete reactions[tTime][m.sender];
+          } else {
+             normalData.push(m);
+          }
+      });
+      parsedReactions = reactions; // グローバルに保存
+
       let html = "", lastDate = "";
       let unreadSeparatorInserted = false;
       const isNewMessageArrived = data.length > lastDisplayedMsgCount;
       lastDisplayedMsgCount = data.length;
 
-      data.forEach(m => {
+      normalData.forEach(m => {
           const d = new Date(m.time);
           const ds = d.toLocaleDateString();
           if(ds!==lastDate){ html+=`<div class="date-divider">${ds}</div>`; lastDate=ds; }
@@ -643,18 +711,143 @@
           const msg = isDel ? '<i class="fas fa-ban"></i> 取消済' : escapeHtml(m.message);
           const cls = isMe ? "msg-row me" : "msg-row other";
           const bbl = isMe ? (isDel?"bubble-me unsent":"bubble-me") : (isDel?"bubble-other unsent":"bubble-other");
-          const click = (isMe && !isDel) ? `onclick="if(confirm('取消しますか？')) fetch(GAS_URL,{method:'POST',body:new URLSearchParams({type:'unsend',sender:'管理者',targetTime:'${m.time}'})}).then(()=>loadMessages(false))"` : "";
+          const safeTime = escapeHtml(m.time);
           
-          if(isMe) html += `<div class="${cls}"><div class="${bbl}" ${click}>${msg}</div><div class="meta-me"><div class="read-mark">${(!isDel&&m.read==="既読"?"既読":"")}</div><div class="time-me">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}</div></div></div>`;
-          else html += `<div class="${cls}"><div class="icon-img"><i class="fas fa-user"></i></div><div><div class="sender-name">${escapeHtml(m.sender)}</div><div style="display:flex;align-items:flex-end;"><div class="${bbl}">${msg}</div><div class="time-other">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}</div></div></div></div>`;
+          let reactionHtml = "";
+          const rxMap = reactions[m.time]; // { sender: emoji }
+          if (rxMap && Object.keys(rxMap).length > 0) {
+              // 絵文字ごとに個数を集計
+              const emojiCount = {};
+              Object.values(rxMap).forEach(e => { emojiCount[e] = (emojiCount[e]||0)+1; });
+              const display = Object.entries(emojiCount).map(([e,c]) => c > 1 ? `${e}<span style="font-size:0.75em;vertical-align:middle;">${c}</span>` : e).join('');
+              reactionHtml = `<div class="reaction-box" onclick="event.stopPropagation();showEmojiPicker(event,'${safeTime}')">${display}</div>`;
+          }
+
+          if(isMe) {
+              const unsendAttr = !isDel ? `data-unsend-time="${safeTime}"` : '';
+              html += `<div class="${cls}"><div class="msg-container" ${unsendAttr}><div class="${bbl}">${msg}</div>${reactionHtml}</div><div class="meta-me"><div class="read-mark">${(!isDel&&m.read==="既読"?"既読":"")}</div><div class="time-me">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}</div></div></div>`;
+          } else {
+              const reactAttr = !isDel ? `data-react-time="${safeTime}" class="msg-container other-msg"` : `class="msg-container"`;
+              html += `<div class="${cls}"><div class="icon-img"><i class="fas fa-user"></i></div><div><div class="sender-name">${escapeHtml(m.sender)}</div><div style="display:flex;align-items:flex-end;"><div ${reactAttr}><div class="${bbl}">${msg}</div>${reactionHtml}</div><div class="time-other">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}</div></div></div></div>`;
+          }
       });
       list.innerHTML = html;
+      attachMessageListeners();
       
       const isNearBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 300;
       if (forceScroll || (isNewMessageArrived && isNearBottom)) {
           setTimeout(scrollToBottom, 100);
       }
       fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ type:'markRead', sender:'管理者' }) });
+  }
+
+  // --- Reaction / Message listeners ---
+  let _reactionTargetTime = null;
+  let parsedReactions = {}; // { targetTime: { sender: emoji } }
+
+  function attachMessageListeners() {
+      // React: other's messages
+      document.querySelectorAll('.msg-container.other-msg').forEach(el => {
+          let pressTimer = null;
+          let pointerDownTime = 0;
+
+          el.addEventListener('pointerdown', e => {
+              pointerDownTime = Date.now();
+              pressTimer = setTimeout(() => { pressTimer = null; }, 400); // long press threshold
+          });
+
+          el.addEventListener('pointerup', e => {
+              const elapsed = Date.now() - pointerDownTime;
+              // If text is selected, do nothing (user wants to copy)
+              if (window.getSelection && window.getSelection().toString().length > 0) return;
+              // If long press (>= 400ms), do nothing (native copy)
+              if (elapsed >= 400) return;
+              if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+              const targetTime = el.dataset.reactTime;
+              if (targetTime) showEmojiPicker(e, targetTime);
+          });
+      });
+
+      // Unsend: my messages
+      document.querySelectorAll('.msg-container[data-unsend-time]').forEach(el => {
+          let pointerDownTime = 0;
+          el.addEventListener('pointerdown', () => { pointerDownTime = Date.now(); });
+          el.addEventListener('pointerup', e => {
+              const elapsed = Date.now() - pointerDownTime;
+              if (window.getSelection && window.getSelection().toString().length > 0) return;
+              if (elapsed >= 400) return;
+              const t = el.dataset.unsendTime;
+              if (t && confirm('取消しますか？')) {
+                  fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ type:'unsend', sender:'管理者', targetTime: t }) })
+                  .then(() => loadMessages(false));
+              }
+          });
+      });
+  }
+
+  function showEmojiPicker(e, targetTime) {
+      _reactionTargetTime = targetTime;
+      const picker = document.getElementById('emojiPicker');
+
+      // 管理者の現在のリアクションをハイライト
+      const myEmoji = (parsedReactions[targetTime] || {})['管理者'] || null;
+      picker.querySelectorAll('.emoji-btn').forEach(btn => {
+          const btnEmoji = btn.textContent.trim();
+          btn.style.background = (btnEmoji === myEmoji) ? '#ffe0e0' : '';
+          btn.style.outline = (btnEmoji === myEmoji) ? '2px solid #e74c3c' : '';
+      });
+
+      picker.classList.add('show');
+
+      // タップ位置の近くに表示
+      const x = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : window.innerWidth / 2);
+      const y = e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : window.innerHeight / 2);
+      const pw = picker.offsetWidth || 280;
+      const left = Math.min(Math.max(x - pw / 2, 8), window.innerWidth - pw - 8);
+      picker.style.left = left + 'px';
+      picker.style.top = (y - 65) + 'px';
+
+      // 外側タップで閉じる
+      setTimeout(() => {
+          document.addEventListener('pointerdown', dismissPicker, { once: true });
+      }, 50);
+  }
+
+  function dismissPicker(e) {
+      const picker = document.getElementById('emojiPicker');
+      if (picker && !picker.contains(e.target)) {
+          picker.classList.remove('show');
+      }
+  }
+
+  function pickEmoji(emoji) {
+      document.getElementById('emojiPicker').classList.remove('show');
+      if (!_reactionTargetTime) return;
+      const targetTime = _reactionTargetTime;
+      _reactionTargetTime = null;
+
+      const myEmoji = (parsedReactions[targetTime] || {})['管理者'] || null;
+
+      if (myEmoji === emoji) {
+          // 同じ絵文字 → キャンセル
+          fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ type:'reaction', sender:'管理者', targetTime: targetTime, text: '' }) })
+          .then(() => loadMessages(true));
+      } else {
+          // 違う絵文字 or 初回 → 書き換え/追加
+          fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ type:'reaction', sender:'管理者', targetTime: targetTime, text: emoji }) })
+          .then(() => loadMessages(true));
+      }
+  }
+
+  function openCustomEmoji() {
+      document.getElementById('emojiPicker').classList.remove('show');
+      const emoji = prompt('絵文字を入力してください');
+      if (emoji && _reactionTargetTime) {
+          const targetTime = _reactionTargetTime;
+          _reactionTargetTime = null;
+          fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ type:'reaction', sender:'管理者', targetTime: targetTime, text: emoji }) })
+          .then(() => loadMessages(true));
+      }
   }
 
   function sendMessage() {
