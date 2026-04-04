@@ -700,11 +700,16 @@
 
       const isEmojiOnly = (str) => {
           if (!str) return false;
-          // 絵文字、記号、数字、バリエーションセレクターなどを許可する正規表現
-          // かなり広範にカバー
-          const emojiRegex = /^(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|[\u2700-\u27bf]|[\u2600-\u26ff]|\u200d)+$/g;
           const cleanStr = str.replace(/\s/g, ''); // 空白を除去して判定
-          return emojiRegex.test(cleanStr);
+          if (!cleanStr) return false;
+          try {
+              // 最新のUnicodeプロパティを用いた厳密な絵文字判定
+              const regex = /^[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Emoji_Modifier}\uFE0F\u200D]+$/u;
+              return regex.test(cleanStr);
+          } catch(e) {
+              // 環境非対応のフォールバック (誤判定を防ぐためデフォルトはfalse)
+              return false;
+          }
       };
 
       normalData.forEach(m => {
