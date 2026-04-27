@@ -283,7 +283,7 @@
     <div id="statsListContainer" style="display:none;">
         <h4 style="margin:10px 0 5px 0; color:#7f8c8d;">部員別 欠席回数 (累計)</h4>
         <table class="stats-table">
-            <thead><tr><th width="50">#</th><th>氏名</th><th>回数</th></tr></thead>
+            <thead><tr><th width="50">#</th><th>氏名</th><th width="80">欠席</th><th width="80">遅刻</th></tr></thead>
             <tbody id="absenceTableBody"></tbody>
         </table>
     </div>
@@ -509,10 +509,15 @@
 
   function renderAbsenceTable(data) {
     const tbody = document.getElementById('absenceTableBody');
-    if(!data || !data.length) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">データなし</td></tr>'; return; }
+    if(!data || !data.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">データなし</td></tr>'; return; }
     tbody.innerHTML = "";
     data.forEach((item, i) => {
-      tbody.innerHTML += `<tr><td><span class="row-num">${i+1}</span></td><td><strong>${escapeHtml(item.name)}</strong></td><td>${item.count}回</td></tr>`;
+      tbody.innerHTML += `<tr>
+        <td><span class="row-num">${i+1}</span></td>
+        <td><strong>${escapeHtml(item.name)}</strong></td>
+        <td><span style="color:#e74c3c;">${item.absentCount}</span></td>
+        <td><span style="color:#f39c12;">${item.lateCount}</span></td>
+      </tr>`;
     });
   }
 
