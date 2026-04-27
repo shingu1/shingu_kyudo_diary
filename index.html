@@ -281,9 +281,28 @@
         <i class="fas fa-list"></i> 欠席者統計を表示
     </button>
     <div id="statsListContainer" style="display:none;">
-        <h4 style="margin:10px 0 5px 0; color:#7f8c8d;">部員別 欠席回数 (累計)</h4>
+        <div style="background:#f8f9fa; padding:10px; border-radius:8px; margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; border:1px solid #eee;">
+            <div style="flex:1; min-width:120px;">
+                <label style="font-size:0.75rem; color:#7f8c8d; display:block; margin-bottom:2px;">年度</label>
+                <select id="statsYearSelect" onchange="updateStatsTable()" style="width:100%; padding:6px; border-radius:4px; border:1px solid #ddd; background:white;">
+                    <option value="2024">2024年度</option>
+                    <option value="2025">2025年度</option>
+                    <option value="2026" selected>2026年度</option>
+                </select>
+            </div>
+            <div style="flex:1; min-width:120px;">
+                <label style="font-size:0.75rem; color:#7f8c8d; display:block; margin-bottom:2px;">表示範囲</label>
+                <select id="statsRangeSelect" onchange="updateStatsTable()" style="width:100%; padding:6px; border-radius:4px; border:1px solid #ddd; background:white;">
+                    <option value="all">年度 全期間</option>
+                    <option value="thisMonth">今月</option>
+                    <option value="last30">直近30日間</option>
+                    <option value="entire">全履歴 (累計)</option>
+                </select>
+            </div>
+        </div>
+        <h4 style="margin:10px 0 5px 0; color:#7f8c8d; font-size:0.9rem;">部員別 統計 (<span id="statsPeriodLabel">...</span>)</h4>
         <table class="stats-table">
-            <thead><tr><th width="50">#</th><th>氏名</th><th width="80">欠席</th><th width="80">遅刻</th></tr></thead>
+            <thead><tr><th width="40">#</th><th>氏名</th><th width="45">欠</th><th width="45">遅</th><th width="70">出席率</th></tr></thead>
             <tbody id="absenceTableBody"></tbody>
         </table>
     </div>
@@ -495,28 +514,62 @@
       if (container.style.display === 'none') {
           container.style.display = 'block';
           btn.innerHTML = '<i class="fas fa-chevron-up"></i> 統計を閉じる';
-          const tbody = document.getElementById('absenceTableBody');
-          if (tbody.innerHTML === "") {
-              tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">読み込み中...</td></tr>';
-              const data = await fetchData("?action=getStats");
-              renderAbsenceTable(data);
-          }
+          updateStatsTable();
       } else {
           container.style.display = 'none';
           btn.innerHTML = '<i class="fas fa-list"></i> 欠席者統計を表示';
       }
   }
 
-  function renderAbsenceTable(data) {
+  async function updateStatsTable() {
+      const tbody = document.getElementById('absenceTableBody');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">読み込み中...</td></tr>';
+      
+      const year = parseInt(document.getElementById('statsYearSelect').value);
+      const range = document.getElementById('statsRangeSelect').value;
+      
+      let start = "", end = "";
+      const labelEl = document.getElementById('statsPeriodLabel');
+      
+      if (range === 'entire') {
+        labelEl.innerText = "全履歴";
+      } else {
+        if (range === 'all') {
+          start = `${year}/05/20`;
+          end = `${year + 1}/05/19`;
+          labelEl.innerText = `${year}年度(5/20〜翌5/19)`;
+        } else if (range === 'thisMonth') {
+          const now = new Date();
+          start = `${now.getFullYear()}/${now.getMonth() + 1}/01`;
+          labelEl.innerText = `${now.getMonth() + 1}月分`;
+        } else if (range === 'last30') {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          start = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+          labelEl.innerText = "直近30日";
+        }
+      }
+
+      const params = `?action=getStats&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+      const result = await fetchData(params);
+      
+      if (result) {
+          renderAbsenceTable(result.data, result.totalDays);
+      }
+  }
+
+  function renderAbsenceTable(data, totalDays) {
     const tbody = document.getElementById('absenceTableBody');
-    if(!data || !data.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">データなし</td></tr>'; return; }
+    if(!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">データなし</td></tr>'; return; }
     tbody.innerHTML = "";
     data.forEach((item, i) => {
+      const rate = totalDays > 0 ? Math.round(((totalDays - item.absentCount) / totalDays) * 100) : 0;
       tbody.innerHTML += `<tr>
         <td><span class="row-num">${i+1}</span></td>
         <td><strong>${escapeHtml(item.name)}</strong></td>
-        <td><span style="color:#e74c3c;">${item.absentCount}</span></td>
-        <td><span style="color:#f39c12;">${item.lateCount}</span></td>
+        <td style="text-align:center;"><span style="color:#e74c3c;">${item.absentCount}</span></td>
+        <td style="text-align:center;"><span style="color:#f39c12;">${item.lateCount}</span></td>
+        <td style="text-align:center; font-weight:bold; color:#2c3e50;">${rate}%</td>
       </tr>`;
     });
   }
